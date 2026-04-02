@@ -1,0 +1,25 @@
+# Data files — not committed (proprietary data)
+python/db/*.xlsx
+python/ppi/*.xlsx
+python/invoices/incoming/*.xlsx
+
+# Output files
+python/output/
+
+# Temporary Excel lock files
+~$*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+dist/
+build/
+*.spec
+
+# PyInstaller build
+python/THO_Checker.exe
+
+# OS
+.DS_Store
+Thumbs.db
