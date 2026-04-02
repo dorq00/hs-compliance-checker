@@ -7,7 +7,7 @@
 
 Import compliance tooling for electronics supply chains. Takes a raw invoice, validates every line against a parts database and government-authorized import lists, tracks quarterly quotas per bank (CVC for spare parts, HSBC for kits), and generates a freight-forwarder-ready compliance report.
 
-Built to replace a manual, error-prone process that runs on every incoming shipment — one wrong HS code or unauthorized item means a customs hold.
+Built to replace a manual, error-prone process that runs on every incoming shipment — one wrong HS code or unauthorized item means a global logistics delay.
 
 ## What It Does
 
