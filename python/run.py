@@ -23,6 +23,7 @@ FOLDER STRUCTURE:
 
 import os
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -158,11 +159,9 @@ def load_db(path):
         names = ["Part No", "HS Code", "Designation", "Class"]
         df.columns = names[:len(df.columns)]
     df["HS Code"] = df["HS Code"].apply(normalize_hs)
-    lookup = {
-        str(r["Part No"]).strip(): r["HS Code"]
-        for _, r in df.iterrows()
-        if str(r["Part No"]).strip() not in ("", "nan", "none")
-    }
+    df["Part No"] = df["Part No"].astype(str).str.strip()
+    df = df[~df["Part No"].str.lower().isin(("", "nan", "none"))]
+    lookup = df.set_index("Part No")["HS Code"].to_dict()
     print(f"  DB       : {len(lookup)} items")
     return lookup
 
@@ -174,7 +173,7 @@ def load_ppi(path, label):
         df = pd.read_excel(path, header=None, dtype=str).fillna("")
         names = ["HS Code", "Designation"]
         df.columns = names[:len(df.columns)]
-    result = {normalize_hs(r["HS Code"]) for _, r in df.iterrows()} - {"-"}
+    result = set(df["HS Code"].apply(normalize_hs)) - {"-"}
     print(f"  PPI_{label} : {len(result)} authorized HS codes")
     return result
 
@@ -230,6 +229,9 @@ def run_ppi_check(df_input, bank, ppi_cvc, ppi_hsbc):
 
 def build_tho_output(df_hs, df_ppi):
     # Both built from same df_input with identical row filter → safe positional join
+    assert len(df_hs) == len(df_ppi), (
+        f"Row count mismatch: HS={len(df_hs)}, PPI={len(df_ppi)} — both must derive from the same df_input"
+    )
     merged = pd.concat(
         [df_hs.reset_index(drop=True), df_ppi[["Bank", "PPI Status"]].reset_index(drop=True)],
         axis=1,
@@ -495,7 +497,7 @@ def main():
         ppi_cvc   = load_ppi(PPI_CVC,  "CVC")
         ppi_hsbc  = load_ppi(PPI_HSBC, "HSBC")
     except Exception as e:
-        abort(str(e))
+        abort(f"{e}\n\n{traceback.format_exc()}")
 
     # ── Run checks ────────────────────────────────────────────────
     print("\n  Running checks...")

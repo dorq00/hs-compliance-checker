@@ -31,9 +31,21 @@ except ImportError:
 
 ROOT          = Path(__file__).parent
 OUTPUT_DIR    = ROOT / "output"
-APPROVAL_FILE = ROOT / "ppi" / "ppi_approval_q1_2026.xlsx"
 PPI_CVC_FILE  = ROOT / "ppi" / "ppi_cvc.xlsx"
 PPI_HSBC_FILE = ROOT / "ppi" / "ppi_hsbc.xlsx"
+
+def _find_approval_file() -> Path:
+    """Return the most recently modified ppi_approval_*.xlsx, or exit with a clear message."""
+    candidates = sorted((ROOT / "ppi").glob("ppi_approval_*.xlsx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not candidates:
+        print("ERROR: No approval file found in ppi/  (expected ppi_approval_*.xlsx)")
+        sys.exit(1)
+    chosen = candidates[0]
+    if len(candidates) > 1:
+        print(f"  NOTE: {len(candidates)} approval files found — using most recent: {chosen.name}")
+    return chosen
+
+APPROVAL_FILE = _find_approval_file()
 
 # ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -169,8 +181,9 @@ def load_consumption(output_dir: Path) -> pd.DataFrame:
             df_in["_Bank"] = df_in["Bank"].str.strip().str.upper() if "Bank" in df_in.columns else "UNKNOWN"
             df_in["_Qty"]  = pd.to_numeric(df_in["Qty"], errors="coerce").fillna(0) if "Qty" in df_in.columns else 0
 
-            for _, row in df_in.iterrows():
-                records.append({"HS Code": row["_HS"], "Bank": row["_Bank"], "Qty": row["_Qty"]})
+            records.extend(
+                df_in[["_HS", "_Bank", "_Qty"]].rename(columns={"_HS": "HS Code", "_Bank": "Bank", "_Qty": "Qty"}).to_dict("records")
+            )
         except Exception as e:
             print(f"  WARNING: could not read {fpath.name} — {e}")
 
@@ -246,7 +259,7 @@ def _rem_style(ws, ri, ci, remaining, auth):
     elif auth > 0 and remaining < auth * 0.1:
         ws.cell(ri, ci).fill = ORANGE_FILL; ws.cell(ri, ci).font = ORANGE_FONT
 
-def write_excel(df: pd.DataFrame, out_path: Path, run_time: str):
+def write_excel(df: pd.DataFrame, out_path: Path, run_time: str, approval_label: str = ""):
     wb = openpyxl.Workbook()
 
     # ── DASHBOARD summary sheet ───────────────────────────────────
@@ -257,13 +270,13 @@ def write_excel(df: pd.DataFrame, out_path: Path, run_time: str):
 
     ws_d.merge_cells("A1:D1")
     tc = ws_d["A1"]
-    tc.value = "PPI QUOTA DASHBOARD — Q1 2026"
+    tc.value = f"PPI QUOTA DASHBOARD{' — ' + approval_label if approval_label else ''}"
     tc.font  = Font(bold=True, size=14, color="FFFFFF")
     tc.fill  = _fill("2E4057")
     tc.alignment = Alignment(horizontal="center", vertical="center")
     ws_d.row_dimensions[1].height = 32
 
-    for i, (k, v) in enumerate([("Generated", run_time), ("Scope", "Q1 2026")], 3):
+    for i, (k, v) in enumerate([("Generated", run_time), ("Scope", approval_label or APPROVAL_FILE.stem)], 3):
         ws_d.cell(i, 1, k).font = Font(bold=True)
         ws_d.cell(i, 2, v)
 
@@ -338,6 +351,10 @@ def main():
 
     run_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    # Derive a human-readable label from the approval filename, e.g. "Q2 2026" from "ppi_approval_q2_2026.xlsx"
+    approval_label = APPROVAL_FILE.stem.replace("ppi_approval_", "").replace("_", " ").upper()
+    print(f"  Approval : {APPROVAL_FILE.name}  ({approval_label})")
+
     print("\n  Loading quotas from approval file...")
     cvc_dict, hsbc_dict = load_quota(APPROVAL_FILE)
 
@@ -351,7 +368,7 @@ def main():
     out_path = OUTPUT_DIR / out_name
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    write_excel(df, out_path, run_time)
+    write_excel(df, out_path, run_time, approval_label)
     print(f"\n  [DONE]  {out_path}")
 
     try:
